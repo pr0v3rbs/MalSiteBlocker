@@ -1377,14 +1377,7 @@ Arguments:
                                              &hostLength,
                                              &urlLength) == TRUE)
                 {
-                    if (IsWhiteListUrl(urlString, hostLength) == FALSE)
-                    {
-                        InsertUrl(pFilter->FilterHandle, urlString, hostLength, urlLength, packet, DispatchLevel);
-                    }
-                    else
-                    {
-                        FILTER_FREE_MEM(urlString);
-                    }
+                    InsertUrl(pFilter->FilterHandle, urlString, hostLength, urlLength, packet, DispatchLevel);
                 }
             }
         }
@@ -1631,7 +1624,7 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
                         // change urlInfo NetBufferList
                         if (NetBufferLists->FirstNetBuffer->DataLength > 0x36 + 87 + 5)
                         {
-                            CopyRedirectPage(&packet[0x36], urlInfo->localPort);
+                            CopyDangerPage(&packet[0x36], urlInfo->localPort);
                             DeleteUrlInfo(urlInfo);
                         }
                         // not enought packet buffer.
@@ -1658,7 +1651,7 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
                     {
                         packet = urlInfo->netBufferList->FirstNetBuffer->CurrentMdl->MappedSystemVa;
                         packet += urlInfo->netBufferList->FirstNetBuffer->CurrentMdlOffset;
-                        CopyRedirectPage(&packet[0x36], urlInfo->localPort);
+                        CopyDangerPage(&packet[0x36], urlInfo->localPort);
                     }
                 }
 
