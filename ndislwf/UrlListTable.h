@@ -5,7 +5,6 @@ struct UrlInfo
 {
     LIST_ENTRY listEntry;
     PCHAR url;
-    UINT32 hostLength;
     UINT32 urlLength;
     UINT16 localPort;
     BOOLEAN isSendToUser;
@@ -25,7 +24,7 @@ VOID ClearUrlListTable();
 
 VOID UninitializeUrlListTable();
 
-VOID InsertUrl(_In_ NDIS_HANDLE ndisHandle, _In_ char* urlString, _In_ UINT32 hostLength, _In_ UINT32 urlLength, _In_ PCHAR framePacket, _In_ BOOLEAN isDispatchLevel);
+VOID InsertUrl(_In_ NDIS_HANDLE ndisHandle, _In_ char* urlString, _In_ UINT32 urlLength, _In_ USHORT srcPort, _In_ BOOLEAN isDispatchLevel);
 
 BOOLEAN IsScanningUrlPort(_In_ UINT16 port, _Outptr_ struct UrlInfo** urlInfo);
 

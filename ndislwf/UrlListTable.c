@@ -40,16 +40,14 @@ VOID UninitializeUrlListTable()
     FILTER_FREE_LOCK(&gUrlListLock);
 }
 
-VOID InsertUrl(_In_ NDIS_HANDLE ndisHandle, _In_ char* urlString, _In_ UINT32 hostLength, _In_ UINT32 urlLength, _In_ PCHAR framePacket, _In_ BOOLEAN isDispatchLevel)
+VOID InsertUrl(_In_ NDIS_HANDLE ndisHandle, _In_ char* urlString, _In_ UINT32 urlLength, _In_ USHORT srcPort, _In_ BOOLEAN isDispatchLevel)
 {
     struct UrlInfo* urlInfo = NULL;
     urlInfo = FILTER_ALLOC_MEM(ndisHandle, sizeof(struct UrlInfo));
 
     urlInfo->url = urlString;
-    urlInfo->hostLength = hostLength;
     urlInfo->urlLength = urlLength;
-    urlInfo->localPort = (UCHAR)framePacket[0x23];
-    urlInfo->localPort += ((UINT16)(framePacket[0x22]) << 8);
+    urlInfo->localPort = srcPort;
     urlInfo->isSendToUser = FALSE;
     urlInfo->scanResult = kUnknown;
     KeQuerySystemTime(&urlInfo->packetRequestTime);

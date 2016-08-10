@@ -12,7 +12,7 @@ CHAR gAcceptTextString[18] = "Accept: text/html";
 CHAR gRefererTextString[10] = "Referer: ";
 CHAR gHostString[7] = "Host: ";
 
-BOOLEAN AnalyzePacketAndParseUrl(_In_ PCHAR httpPacket, _In_ NDIS_HANDLE ndisHandle, _Outptr_ PCHAR* urlString, _Outptr_ UINT32* hostLength, _Outptr_ UINT32* urlLength)
+BOOLEAN AnalyzePacketAndParseUrl(_In_ PCHAR httpPacket, _In_ NDIS_HANDLE ndisHandle, _Outptr_ PCHAR* urlString, _Outptr_ UINT32* urlLength)
 {
     BOOLEAN result = FALSE;
     BOOLEAN isAcceptText = FALSE;
@@ -46,7 +46,6 @@ BOOLEAN AnalyzePacketAndParseUrl(_In_ PCHAR httpPacket, _In_ NDIS_HANDLE ndisHan
                     NdisMoveMemory(*urlString, &httpPacket[packetIdx - hostIdx], hostIdx);
                     (*urlString)[hostIdx] = 0;
                     *urlLength = hostIdx + 1;
-                    *hostLength = hostIdx;
                 }
             }
             // 강제접속을 하려는 시도인지 확인한다.
@@ -120,4 +119,29 @@ BOOLEAN CopyNetBufferLists(_In_ PNET_BUFFER_LIST netBufferLists, _Outptr_ PNET_B
 VOID FreeNetBufferLists(_In_ PNET_BUFFER_LIST netBufferList)
 {
     NdisFreeCloneNetBufferList(netBufferList, NDIS_CLONE_FLAGS_USE_ORIGINAL_MDLS);
+}
+
+BOOLEAN IsTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* srcPort)
+{
+    BOOLEAN result = FALSE;
+    struct IP* ip = NULL;
+    struct TCP* tcp = NULL;
+
+    if (0x0800 == ntohs(eth->type)) // IPv4
+    {
+        ip = (struct IP*)((PUCHAR)eth + sizeof(struct ETH));
+        tcp = (struct TCP*)((PUCHAR)ip + ip->ip_hl * 4);
+        *srcPort = ntohs(tcp->th_sport);
+        if (ntohs(tcp->th_dport) == dstPort)
+        {
+            result = TRUE;
+        }
+    }
+
+    return result;
+}
+
+USHORT ntohs(_In_ USHORT networkUShort)
+{
+    return (((networkUShort & 0xff) << 8) + ((networkUShort >> 8) & 0xff));
 }

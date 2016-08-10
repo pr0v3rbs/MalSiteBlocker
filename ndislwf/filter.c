@@ -1299,7 +1299,6 @@ Arguments:
     PCHAR               packet;
     UINT16              srcPort = 0;
     PCHAR               urlString = NULL;
-    UINT32              hostLength = 0;
     UINT32              urlLength = 0;
     struct UrlInfo*     urlInfo = NULL;
 
@@ -1354,9 +1353,8 @@ Arguments:
         {
             packet = NetBufferLists->FirstNetBuffer->CurrentMdl->MappedSystemVa;
             packet += NetBufferLists->FirstNetBuffer->CurrentMdlOffset;
-            srcPort = ((UINT16)(packet[0x22]) << 8) + (UCHAR)packet[0x23];
 
-            if (packet[0x24] == '\x00' && packet[0x25] == '\x50' && // destination PORT 80
+            if (IsTcpPacket((struct ETH*)packet, 80, &srcPort) && // check HTTP 80 port
                 NetBufferLists->FirstNetBuffer->MdlChain->Next != NULL) // HTTP data가 존재하는지 확인.
             {
                 // 이미 UrlList에 들어있는 srcPort인지 확인해줌
@@ -1374,10 +1372,9 @@ Arguments:
                 else if (AnalyzePacketAndParseUrl(NetBufferLists->FirstNetBuffer->MdlChain->Next->MappedSystemVa,
                                              pFilter->FilterHandle,
                                              &urlString,
-                                             &hostLength,
                                              &urlLength) == TRUE)
                 {
-                    InsertUrl(pFilter->FilterHandle, urlString, hostLength, urlLength, packet, DispatchLevel);
+                    InsertUrl(pFilter->FilterHandle, urlString, urlLength, srcPort, DispatchLevel);
                 }
             }
         }
