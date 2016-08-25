@@ -5,6 +5,7 @@
 -- */
 
 #include "precomp.h"
+#include "FilterFunction.h"
 #include "UrlListTable.h"
 #include "WhiteListTable.h"
 
@@ -151,6 +152,7 @@ FilterDeviceIoControl(
     PMS_FILTER                  pFilter = NULL;
     BOOLEAN                     bFalse = FALSE;
     struct UrlInfo*             urlInfo;
+    //PCHAR                       packet = NULL;
 
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -197,7 +199,6 @@ FilterDeviceIoControl(
             {
                 if (IrpSp->Parameters.DeviceIoControl.OutputBufferLength >= urlInfo->urlLength + 2)
                 {
-                    // TODO : public key mode라면 유저한테 정보를 전달해주고 바로 urllist에서 제거한다.
                     // 유저어플리케이션에 port번호와 url을 넘겨준다.
                     // 이후 유저어플리케이션에서 port번호를 이용하여 스캔 결과를 알려준다.
                     OutputBuffer = (PUCHAR)Irp->AssociatedIrp.SystemBuffer;
@@ -221,7 +222,29 @@ FilterDeviceIoControl(
         case IOCTL_FILTER_SEND_SCAN_RESULT:
             if (IrpSp->Parameters.DeviceIoControl.InputBufferLength == sizeof(struct ScanInfo))
             {
-                SaveScanResult((struct ScanInfo*)Irp->AssociatedIrp.SystemBuffer);
+                /*if (IsScanningUrlPort(((struct ScanInfo*)Irp->AssociatedIrp.SystemBuffer)->localPort, &urlInfo) &&
+                    urlInfo->netBufferList)
+                {
+                    switch (((struct ScanInfo*)Irp->AssociatedIrp.SystemBuffer)->scanResult)
+                    {
+                    case kBad:
+                        packet = urlInfo->netBufferList->FirstNetBuffer->CurrentMdl->MappedSystemVa;
+                        packet += urlInfo->netBufferList->FirstNetBuffer->CurrentMdlOffset;
+                        CopyDangerPage(&packet[0x36], urlInfo->localPort);
+                    case kClean:
+                        NdisFIndicateReceiveNetBufferLists(pFilter->FilterHandle,
+                            urlInfo->netBufferList,
+                            urlInfo->portNumber,
+                            urlInfo->numberOfNetBufferList,
+                            urlInfo->receiveFlags);
+                        DeleteUrlInfo(urlInfo);
+                        break;
+                    }
+                }
+                else*/
+                {
+                    SaveScanResult((struct ScanInfo*)Irp->AssociatedIrp.SystemBuffer);
+                }
             }
             else
             {

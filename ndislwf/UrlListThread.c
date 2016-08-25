@@ -33,6 +33,7 @@ VOID DeleteUrlListThreadProc(_In_ PVOID param)
     {
         if (gFilterEnable)
         {
+            // check send rst packet and recv redirect packet
             if (GetNeedToDeleteListEntry(&urlInfo))
             {
                 DeleteUrlInfo(urlInfo);

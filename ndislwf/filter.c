@@ -273,6 +273,7 @@ N.B.:  FILTER can use NdisRegisterDeviceEx to create a device, so the upper
     PMS_FILTER              pFilter = NULL;
     NDIS_STATUS             Status = NDIS_STATUS_SUCCESS;
     NDIS_FILTER_ATTRIBUTES  FilterAttributes;
+    NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
     ULONG                   Size;
     BOOLEAN               bFalse = FALSE;
 
@@ -352,6 +353,27 @@ N.B.:  FILTER can use NdisRegisterDeviceEx to create a device, so the upper
         pFilter->TrackSends = TRUE;
         pFilter->FilterHandle = NdisFilterHandle;
 
+        NdisZeroMemory(&PoolParameters, sizeof(NET_BUFFER_LIST_POOL_PARAMETERS));
+
+        PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+        PoolParameters.Header.Size = sizeof(PoolParameters);
+        PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_IPX;
+        PoolParameters.ContextSize = 0;
+        PoolParameters.fAllocateNetBuffer = TRUE;
+        PoolParameters.PoolTag = FILTER_ALLOC_TAG;
+
+        pFilter->RecvNetBufferListPoolHandle = NdisAllocateNetBufferListPool(NdisFilterHandle, &PoolParameters);
+
+        PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+        PoolParameters.Header.Size = sizeof(PoolParameters);
+        PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_IPX;
+        PoolParameters.ContextSize = sizeof(NFILTER_SEND_NETBUFLIST_RSVD);
+        PoolParameters.fAllocateNetBuffer = TRUE;
+        PoolParameters.PoolTag = FILTER_ALLOC_TAG;
+
+        pFilter->SendNetBufferListPoolHandle = NdisAllocateNetBufferListPool(NdisFilterHandle, &PoolParameters);
 
         NdisZeroMemory(&FilterAttributes, sizeof(NDIS_FILTER_ATTRIBUTES));
         FilterAttributes.Header.Revision = NDIS_FILTER_ATTRIBUTES_REVISION_1;
@@ -660,6 +682,24 @@ NOTE: Called at PASSIVE_LEVEL and the filter is in paused state
     // Filter must be in paused state
     //
     FILTER_ASSERT(pFilter->State == FilterPaused);
+
+    if (pFilter->SendNetBufferListPoolHandle)
+    {
+        NdisFreeNetBufferListPool(pFilter->SendNetBufferListPoolHandle);
+        pFilter->SendNetBufferListPoolHandle = NULL;
+    }
+
+    if (pFilter->RecvNetBufferListPoolHandle)
+    {
+        NdisFreeNetBufferListPool(pFilter->RecvNetBufferListPoolHandle);
+        pFilter->RecvNetBufferListPoolHandle = NULL;
+    }
+
+    if (pFilter->SendNetBufferListPoolHandle)
+    {
+        NdisFreeNetBufferListPool(pFilter->SendNetBufferListPoolHandle);
+        pFilter->SendNetBufferListPoolHandle = NULL;
+    }
 
 
     //
@@ -1354,7 +1394,7 @@ Arguments:
             packet = NetBufferLists->FirstNetBuffer->CurrentMdl->MappedSystemVa;
             packet += NetBufferLists->FirstNetBuffer->CurrentMdlOffset;
 
-            if (IsTcpPacket((struct ETH*)packet, 80, &srcPort) && // check HTTP 80 port
+            if (IsSendTcpPacket((struct ETH*)packet, 80, &srcPort) && // check HTTP 80 port
                 NetBufferLists->FirstNetBuffer->MdlChain->Next != NULL) // HTTP data가 존재하는지 확인.
             {
                 // 이미 UrlList에 들어있는 srcPort인지 확인해줌
@@ -1453,9 +1493,8 @@ Arguments:
     // Return the received NBLs.  If you removed any NBLs from the chain, make
     // sure the chain isn't empty (i.e., NetBufferLists!=NULL).
 
-    if (NdisTestNblFlag(NetBufferLists, 0x10000000))
+    if (NdisTestNblFlag(NetBufferLists, 0x20000000) || NdisTestNblFlag(NetBufferLists, 0x10000000))
     {
-        FreeNetBufferLists(NetBufferLists);
     }
     else
     {
@@ -1507,10 +1546,13 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
     BOOLEAN             DispatchLevel;
     //ULONG               Ref;
     BOOLEAN             bFalse = FALSE;
+    //PCHAR               tmpPacket = NULL;
     PCHAR               packet = NULL;
     struct UrlInfo*     urlInfo;
     UINT16              dstPort = 0;
     BOOLEAN             needToDrop = FALSE;
+    //PUCHAR              pCopyBuf;
+    BYTE                tcpTotalLength;
 #if DBG
     ULONG               ReturnFlags;
 #endif
@@ -1582,56 +1624,44 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
         // deep copy, and return the original NBL.
         //
 
-        // public key mode라면 receive packet 수정할 필요 없으므로 이 조건문 안타면 됨.
         if (gFilterEnable)
         {
             packet = NetBufferLists->FirstNetBuffer->CurrentMdl->MappedSystemVa;
             packet += NetBufferLists->FirstNetBuffer->CurrentMdlOffset;
-            dstPort = ((UINT16)(packet[0x24]) << 8) + (UCHAR)packet[0x25];
 
-            if (packet[0x22] == '\x00' && packet[0x23] == '\x50')
+            if (IsReceiveTcpPacket((struct ETH*)packet, 80, &dstPort, &tcpTotalLength))
             {
-                if (NDIS_TEST_RECEIVE_CANNOT_PEND(ReceiveFlags) == FALSE &&
-                    IsScanningUrlPort(dstPort, &urlInfo))
+                if (IsScanningUrlPort(dstPort, &urlInfo))
                 {
-                    if (urlInfo->isCopiedReceivePacket)
+                    if (urlInfo->netBufferList)
                     {
                         FreeNetBufferLists(urlInfo->netBufferList);
-                        urlInfo->isCopiedReceivePacket = FALSE;
+                        urlInfo->netBufferList = NULL;
                     }
 
-                    if (urlInfo->isCopiedReceivePacket == FALSE &&
+                    if (urlInfo->netBufferList == NULL &&
                         CopyNetBufferLists(NetBufferLists, &urlInfo->netBufferList) == TRUE)
                     {
                         urlInfo->filterHandle = pFilter->FilterHandle;
                         urlInfo->portNumber = PortNumber;
                         urlInfo->numberOfNetBufferList = NumberOfNetBufferLists;
                         urlInfo->receiveFlags = ReceiveFlags;
-                        urlInfo->isCopiedReceivePacket = TRUE;
                     }
 
                     // 해당 커넥션의 검사 결과상태를 확인한다. unknown이면 drop시킨다.
                     if (urlInfo->scanResult == kUnknown)
                     {
-                        needToDrop = TRUE;
+                        if (NDIS_TEST_RECEIVE_CANNOT_PEND(ReceiveFlags) == FALSE)
+                            needToDrop = TRUE;
                     }
                     // bad 라면 로컬서버의 동적페이지로 리다이렉트 시킨다.
                     else if (urlInfo->scanResult == kBad)
                     {
                         // change urlInfo NetBufferList
-                        if (NetBufferLists->FirstNetBuffer->DataLength > 0x36 + 87 + 5)
-                        {
-                            CopyDangerPage(&packet[0x36], urlInfo->localPort);
-                            DeleteUrlInfo(urlInfo);
-                        }
-                        // not enought packet buffer.
-                        else
-                        {
-                            needToDrop = TRUE;
-                        }
+                        CopyDangerPage(&packet[0x36], urlInfo->localPort);
+                        DeleteUrlInfo(urlInfo);
                     }
-                    // !(unknown && bad)
-                    else
+                    else // !(unknown && bad)
                     {
                         DeleteUrlInfo(urlInfo);
                     }
@@ -1641,33 +1671,15 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
             // 스캔이 완료된 다른 패킷들을 검사해서 Indicate 해줌
             while (GetNeedToSendPacketListEntry(&urlInfo))
             {
-                if (urlInfo->scanResult == kBad)
-                {
-                    // change urlInfo NetBufferList
-                    if (urlInfo->netBufferList->FirstNetBuffer->DataLength > 0x36 + 87 + 5)
-                    {
-                        packet = urlInfo->netBufferList->FirstNetBuffer->CurrentMdl->MappedSystemVa;
-                        packet += urlInfo->netBufferList->FirstNetBuffer->CurrentMdlOffset;
-                        CopyDangerPage(&packet[0x36], urlInfo->localPort);
-                    }
-                }
-
                 NdisFIndicateReceiveNetBufferLists(pFilter->FilterHandle,
                     urlInfo->netBufferList,
                     urlInfo->portNumber,
                     urlInfo->numberOfNetBufferList,
                     urlInfo->receiveFlags);
 
-                urlInfo->netBufferList = NULL;
-                urlInfo->isCopiedReceivePacket = FALSE;
-
-                if (urlInfo->scanResult == kClean)
-                {
-                    DeleteUrlInfo(urlInfo);
-                }
+                DeleteUrlInfo(urlInfo);
             }
         }
-
 
         if (needToDrop)
         {

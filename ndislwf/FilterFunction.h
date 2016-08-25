@@ -10,6 +10,8 @@ BOOLEAN CopyNetBufferLists(_In_ PNET_BUFFER_LIST netBufferLists, _Outptr_ PNET_B
 
 VOID FreeNetBufferLists(_In_ PNET_BUFFER_LIST netBufferList);
 
-BOOLEAN IsTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* srcPort);
+BOOLEAN IsSendTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* srcPort);
+
+BOOLEAN IsReceiveTcpPacket(_In_ struct ETH* eth, _In_ USHORT srcPort, _Out_ USHORT* dstPort, _Out_ BYTE* tcpTotalLength);
 
 USHORT ntohs(_In_ USHORT networkUShort);

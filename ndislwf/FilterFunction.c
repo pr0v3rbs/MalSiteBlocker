@@ -121,7 +121,7 @@ VOID FreeNetBufferLists(_In_ PNET_BUFFER_LIST netBufferList)
     NdisFreeCloneNetBufferList(netBufferList, NDIS_CLONE_FLAGS_USE_ORIGINAL_MDLS);
 }
 
-BOOLEAN IsTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* srcPort)
+BOOLEAN IsSendTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* srcPort)
 {
     BOOLEAN result = FALSE;
     struct IP* ip = NULL;
@@ -130,11 +130,39 @@ BOOLEAN IsTcpPacket(_In_ struct ETH* eth, _In_ USHORT dstPort, _Out_ USHORT* src
     if (0x0800 == ntohs(eth->type)) // IPv4
     {
         ip = (struct IP*)((PUCHAR)eth + sizeof(struct ETH));
-        tcp = (struct TCP*)((PUCHAR)ip + ip->ip_hl * 4);
-        *srcPort = ntohs(tcp->th_sport);
-        if (ntohs(tcp->th_dport) == dstPort)
+        if (ip->ip_p == 0x06)
         {
-            result = TRUE;
+            tcp = (struct TCP*)((PUCHAR)ip + ip->ip_hl * 4);
+            *srcPort = ntohs(tcp->th_sport);
+            if (ntohs(tcp->th_dport) == dstPort)
+            {
+                result = TRUE;
+            }
+        }
+    }
+
+    return result;
+}
+
+BOOLEAN IsReceiveTcpPacket(_In_ struct ETH* eth, _In_ USHORT srcPort, _Out_ USHORT* dstPort, _Out_ BYTE* tcpTotalLength)
+{
+    BOOLEAN result = FALSE;
+    struct IP* ip = NULL;
+    struct TCP* tcp = NULL;
+
+    if (ntohs(eth->type) == 0x0800) // IPv4
+    {
+        ip = (struct IP*)((PUCHAR)eth + sizeof(struct ETH));
+        if (ip->ip_p == 0x06)
+        {
+            tcp = (struct TCP*)((PUCHAR)ip + ip->ip_hl * 4);
+            *tcpTotalLength = 14 + ip->ip_hl * 4;
+            *dstPort = ntohs(tcp->th_dport);
+            if (ntohs(tcp->th_sport) == srcPort)
+            {
+                *tcpTotalLength += tcp->th_off * 4;
+                result = TRUE;
+            }
         }
     }
 

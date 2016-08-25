@@ -305,6 +305,8 @@ typedef struct _MS_FILTER
     ULONG                           RefCount;
 
     NDIS_HANDLE                     FilterHandle;
+    NDIS_HANDLE                     SendNetBufferListPoolHandle;
+    NDIS_HANDLE                     RecvNetBufferListPoolHandle;
     NDIS_STRING                     FilterModuleName;
     NDIS_STRING                     MiniportFriendlyName;
     NDIS_STRING                     MiniportName;
@@ -343,6 +345,13 @@ typedef struct _FILTER_DEVICE_EXTENSION
     ULONG            Signature;
     NDIS_HANDLE      Handle;
 } FILTER_DEVICE_EXTENSION, *PFILTER_DEVICE_EXTENSION;
+
+typedef struct _NFILTER_SEND_NETBUFLIST_RSVD
+{
+    PIRP                    pIrp;
+    ULONG                   RefCount;
+
+} NFILTER_SEND_NETBUFLIST_RSVD, *PNFILTER_SEND_NETBUFLIST_RSVD;
 
 
 #define FILTER_READY_TO_PAUSE(_Filter)      \

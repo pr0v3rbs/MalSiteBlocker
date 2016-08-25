@@ -10,12 +10,13 @@ struct UrlInfo
     BOOLEAN isSendToUser;
     ScanResult scanResult;
     TIME packetRequestTime;
-    BOOLEAN isCopiedReceivePacket;
     NDIS_HANDLE filterHandle;
     PNET_BUFFER_LIST netBufferList;
     NDIS_PORT_NUMBER portNumber;
     ULONG numberOfNetBufferList;
     ULONG receiveFlags;
+    PNET_BUFFER_LIST sendNetBufferLists;
+    ULONG sendFlags;
 };
 
 VOID InitializeUrlListTable();
