@@ -6,6 +6,8 @@ BOOLEAN AnalyzePacketAndParseUrl(_In_ PCHAR httpPacket, _In_ NDIS_HANDLE ndisHan
 
 VOID CopyDangerPage(_Inout_ CHAR* httpPacket, _In_ USHORT port);
 
+VOID SetReset(_Inout_ struct ETH* eth);
+
 BOOLEAN CopyNetBufferLists(_In_ PNET_BUFFER_LIST netBufferLists, _Outptr_ PNET_BUFFER_LIST* outNetBufferList);
 
 VOID FreeNetBufferLists(_In_ PNET_BUFFER_LIST netBufferList);

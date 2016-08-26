@@ -24,10 +24,15 @@ VOID ClearUrlListTable()
         listEntry = RemoveHeadList(&gUrlListHead);
         FILTER_RELEASE_LOCK(&gUrlListLock, FALSE);
         urlInfo = CONTAINING_RECORD(listEntry, struct UrlInfo, listEntry);
-        if (urlInfo->netBufferList)
+        if (urlInfo->sendNetBufferLists)
         {
-            FreeNetBufferLists(urlInfo->netBufferList);
-            urlInfo->netBufferList = NULL;
+            FreeNetBufferLists(urlInfo->sendNetBufferLists);
+            urlInfo->sendNetBufferLists = NULL;
+        }
+        if (urlInfo->recvNetBufferLists)
+        {
+            FreeNetBufferLists(urlInfo->recvNetBufferLists);
+            urlInfo->recvNetBufferLists = NULL;
         }
         FILTER_FREE_MEM(urlInfo->url);
         FILTER_FREE_MEM(urlInfo);
@@ -46,13 +51,15 @@ VOID InsertUrl(_In_ NDIS_HANDLE ndisHandle, _In_ char* urlString, _In_ UINT32 ur
     struct UrlInfo* urlInfo = NULL;
     urlInfo = FILTER_ALLOC_MEM(ndisHandle, sizeof(struct UrlInfo));
 
-    urlInfo->netBufferList = NULL;
+    urlInfo->recvNetBufferLists = NULL;
     urlInfo->sendNetBufferLists = NULL;
     urlInfo->url = urlString;
     urlInfo->urlLength = urlLength;
     urlInfo->localPort = srcPort;
     urlInfo->isSendToUser = FALSE;
     urlInfo->scanResult = kUnknown;
+    urlInfo->isSendComplete = FALSE;
+    urlInfo->isRecvComplete = FALSE;
     KeQuerySystemTime(&urlInfo->packetRequestTime);
 
     FILTER_ACQUIRE_LOCK(&gUrlListLock, isDispatchLevel);
@@ -115,8 +122,8 @@ BOOLEAN GetNeedToDeleteListEntry(_Outptr_ struct UrlInfo** urlInfo)
     {
         *urlInfo = CONTAINING_RECORD(listEntry, struct UrlInfo, listEntry);
         // 패킷이 들어온지 30초 이상 지났고, 스캔이 완료됐으면.
-        if (currentTime.QuadPart - (*urlInfo)->packetRequestTime.QuadPart > 300000000 && // 패킷 요청 시간이 30초 이상 지났다면
-            (*urlInfo)->scanResult != kUnknown)
+        if (((*urlInfo)->scanResult != kUnknown && currentTime.QuadPart - (*urlInfo)->packetRequestTime.QuadPart > 300000000) || // 패킷 요청 시간이 30초 이상 지났다면
+            ((*urlInfo)->scanResult == kBad && (*urlInfo)->isRecvComplete && (*urlInfo)->isSendComplete))
         {
             result = TRUE;
             break;
@@ -139,8 +146,30 @@ BOOLEAN GetNeedToSendPacketListEntry(_Outptr_ struct UrlInfo** urlInfo)
     while (listEntry != &gUrlListHead)
     {
         *urlInfo = CONTAINING_RECORD(listEntry, struct UrlInfo, listEntry);
-        // clean으로 검사가 완료된 패킷이면.
-        if ((*urlInfo)->scanResult == kClean && (*urlInfo)->netBufferList)
+        if ((*urlInfo)->scanResult == kBad && (*urlInfo)->sendNetBufferLists)
+        {
+            result = TRUE;
+            break;
+        }
+        listEntry = listEntry->Flink;
+    }
+    FILTER_RELEASE_LOCK(&gUrlListLock, FALSE);
+
+    return result;
+}
+
+BOOLEAN GetNeedToReceivePacketListEntry(_Outptr_ struct UrlInfo** urlInfo)
+{
+    BOOLEAN result = FALSE;
+    PLIST_ENTRY listEntry = gUrlListHead.Flink;
+    TIME currentTime;
+    KeQuerySystemTime(&currentTime);
+
+    FILTER_ACQUIRE_LOCK(&gUrlListLock, FALSE);
+    while (listEntry != &gUrlListHead)
+    {
+        *urlInfo = CONTAINING_RECORD(listEntry, struct UrlInfo, listEntry);
+        if ((*urlInfo)->scanResult == kClean && (*urlInfo)->recvNetBufferLists)
         {
             result = TRUE;
             break;
@@ -183,14 +212,14 @@ VOID DeleteUrlInfo(_In_ struct UrlInfo* urlInfo)
 
     if (urlInfo->sendNetBufferLists)
     {
-        //ndisprotFreeReceiveNetBufferList(urlInfo->sendNetBufferLists);
+        FreeNetBufferLists(urlInfo->sendNetBufferLists);
         urlInfo->sendNetBufferLists = NULL;
     }
 
-    if (urlInfo->netBufferList)
+    if (urlInfo->recvNetBufferLists)
     {
-        FreeNetBufferLists(urlInfo->netBufferList);
-        urlInfo->netBufferList = NULL;
+        FreeNetBufferLists(urlInfo->recvNetBufferLists);
+        urlInfo->recvNetBufferLists = NULL;
     }
 
     FILTER_FREE_MEM(urlInfo->url);

@@ -97,6 +97,22 @@ VOID CopyDangerPage(_Inout_ CHAR* httpPacket, _In_ USHORT port)
     }
 }
 
+VOID SetReset(_Inout_ struct ETH* eth)
+{
+    struct IP* ip = NULL;
+    struct TCP* tcp = NULL;
+
+    if (0x0800 == ntohs(eth->type)) // IPv4
+    {
+        ip = (struct IP*)((PUCHAR)eth + sizeof(struct ETH));
+        if (ip->ip_p == 0x06)
+        {
+            tcp = (struct TCP*)((PUCHAR)ip + ip->ip_hl * 4);
+            tcp->th_flags |= TH_RST;
+        }
+    }
+}
+
 BOOLEAN CopyNetBufferLists(_In_ PNET_BUFFER_LIST netBufferLists, _Outptr_ PNET_BUFFER_LIST* outNetBufferList)
 {
     BOOLEAN result = FALSE;

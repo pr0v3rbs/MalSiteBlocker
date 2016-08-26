@@ -1285,7 +1285,6 @@ Return Value:
         {
             NumOfSendCompletes++;
             CurrNbl = NET_BUFFER_LIST_NEXT_NBL(CurrNbl);
-
         }
         DispatchLevel = NDIS_TEST_SEND_AT_DISPATCH_LEVEL(SendCompleteFlags);
         FILTER_ACQUIRE_LOCK(&pFilter->Lock, DispatchLevel);
@@ -1407,6 +1406,11 @@ Arguments:
                         // 패킷이 들어온지 30초가 지나면 list에서 삭제해줌.
                         KeQuerySystemTime(&urlInfo->packetRequestTime);
                     }
+                    else if (urlInfo->scanResult == kBad)
+                    {
+                        SetReset((struct ETH*)packet);
+                        urlInfo->isSendComplete = TRUE;
+                    }
                 }
                 // UrlList에 들어있지 않은 커넥션(srcPort 패킷) 이라면 http request 정보를 분석해서 UrlList에 넣는다.
                 else if (AnalyzePacketAndParseUrl(NetBufferLists->FirstNetBuffer->MdlChain->Next->MappedSystemVa,
@@ -1416,6 +1420,38 @@ Arguments:
                 {
                     InsertUrl(pFilter->FilterHandle, urlString, urlLength, srcPort, DispatchLevel);
                 }
+
+                /*if (urlInfo)
+                {
+                    if (urlInfo->sendNetBufferLists)
+                    {
+                        FreeNetBufferLists(urlInfo->sendNetBufferLists);
+                        urlInfo->sendNetBufferLists = NULL;
+                    }
+
+                    if (urlInfo->sendNetBufferLists == NULL &&
+                        CopyNetBufferLists(NetBufferLists, &urlInfo->sendNetBufferLists) == TRUE)
+                    {
+                        urlInfo->sendPortNumber = PortNumber;
+                        urlInfo->sendFlags = SendFlags;
+                    }
+                }*/
+
+                // 스캔이 완료된 다른 패킷들을 검사해서 Send 해줌
+                /*while (GetNeedToSendPacketListEntry(&urlInfo))
+                {
+                    packet = urlInfo->sendNetBufferLists->FirstNetBuffer->CurrentMdl->MappedSystemVa;
+                    packet += urlInfo->sendNetBufferLists->FirstNetBuffer->CurrentMdlOffset;
+
+                    SetReset((struct ETH*)packet);
+
+                    NdisFSendNetBufferLists(pFilter->FilterHandle,
+                        urlInfo->sendNetBufferLists,
+                        urlInfo->sendPortNumber,
+                        urlInfo->sendFlags);
+
+                    urlInfo->isSendComplete = TRUE;
+                }*/
             }
         }
 
@@ -1633,18 +1669,17 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
             {
                 if (IsScanningUrlPort(dstPort, &urlInfo))
                 {
-                    if (urlInfo->netBufferList)
+                    if (urlInfo->recvNetBufferLists)
                     {
-                        FreeNetBufferLists(urlInfo->netBufferList);
-                        urlInfo->netBufferList = NULL;
+                        FreeNetBufferLists(urlInfo->recvNetBufferLists);
+                        urlInfo->recvNetBufferLists = NULL;
                     }
 
-                    if (urlInfo->netBufferList == NULL &&
-                        CopyNetBufferLists(NetBufferLists, &urlInfo->netBufferList) == TRUE)
+                    if (urlInfo->recvNetBufferLists == NULL &&
+                        CopyNetBufferLists(NetBufferLists, &urlInfo->recvNetBufferLists) == TRUE)
                     {
-                        urlInfo->filterHandle = pFilter->FilterHandle;
-                        urlInfo->portNumber = PortNumber;
-                        urlInfo->numberOfNetBufferList = NumberOfNetBufferLists;
+                        urlInfo->recvPortNumber = PortNumber;
+                        urlInfo->recvNumberOfNetBufferList = NumberOfNetBufferLists;
                         urlInfo->receiveFlags = ReceiveFlags;
                     }
 
@@ -1659,7 +1694,7 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
                     {
                         // change urlInfo NetBufferList
                         CopyDangerPage(&packet[0x36], urlInfo->localPort);
-                        DeleteUrlInfo(urlInfo);
+                        urlInfo->isRecvComplete = TRUE;
                     }
                     else // !(unknown && bad)
                     {
@@ -1669,12 +1704,13 @@ N.B.: It is important to check the ReceiveFlags in NDIS_TEST_RECEIVE_CANNOT_PEND
             }
 
             // 스캔이 완료된 다른 패킷들을 검사해서 Indicate 해줌
-            while (GetNeedToSendPacketListEntry(&urlInfo))
+            while (GetNeedToReceivePacketListEntry(&urlInfo))
             {
+                // clean한 것들만 가져옴.
                 NdisFIndicateReceiveNetBufferLists(pFilter->FilterHandle,
-                    urlInfo->netBufferList,
-                    urlInfo->portNumber,
-                    urlInfo->numberOfNetBufferList,
+                    urlInfo->recvNetBufferLists,
+                    urlInfo->recvPortNumber,
+                    urlInfo->recvNumberOfNetBufferList,
                     urlInfo->receiveFlags);
 
                 DeleteUrlInfo(urlInfo);

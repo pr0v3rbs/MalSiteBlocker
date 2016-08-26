@@ -10,13 +10,15 @@ struct UrlInfo
     BOOLEAN isSendToUser;
     ScanResult scanResult;
     TIME packetRequestTime;
-    NDIS_HANDLE filterHandle;
-    PNET_BUFFER_LIST netBufferList;
-    NDIS_PORT_NUMBER portNumber;
-    ULONG numberOfNetBufferList;
+    PNET_BUFFER_LIST recvNetBufferLists;
+    NDIS_PORT_NUMBER recvPortNumber;
+    ULONG recvNumberOfNetBufferList;
     ULONG receiveFlags;
     PNET_BUFFER_LIST sendNetBufferLists;
+    NDIS_PORT_NUMBER sendPortNumber;
     ULONG sendFlags;
+    BOOLEAN isSendComplete;
+    BOOLEAN isRecvComplete;
 };
 
 VOID InitializeUrlListTable();
@@ -34,6 +36,8 @@ BOOLEAN GetUrlInfo(_Outptr_ struct UrlInfo** urlInfo);
 BOOLEAN GetNeedToDeleteListEntry(_Outptr_ struct UrlInfo** urlInfo);
 
 BOOLEAN GetNeedToSendPacketListEntry(_Outptr_ struct UrlInfo** urlInfo);
+
+BOOLEAN GetNeedToReceivePacketListEntry(_Outptr_ struct UrlInfo** urlInfo);
 
 VOID SaveScanResult(_In_ struct ScanInfo* scanInfo);
 
